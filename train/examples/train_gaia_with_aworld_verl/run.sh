@@ -3,7 +3,7 @@
 set -xeuo pipefail
 
 # ================= cluster topology =================
-export GPUS_PER_NODE=${SLURM_GPUS_ON_NODE:-${GPUS_PER_NODE:-1}}  # GPUs on this node
+export GPUS_PER_NODE=${SLURM_GPUS_ON_NODE:-${GPUS_PER_NODE:-8}}  # GPUs on this node
 NNODES=${SLURM_JOB_NUM_NODES:-${NNODES:-1}}
 export NNODES
 export RAY_NUM_NODES=$NNODES
@@ -25,7 +25,7 @@ train_files=$DATA_ROOT/datasets/train.parquet
 test_files=$DATA_ROOT/datasets/test.parquet
 
 # =================== custom ===================
-path_to_train="/your/path/to/train"
+path_to_train="/root/AWorld/train"
 reward_fn_name=gaia_reward_func
 reward_fn_file_path=${path_to_train}/examples/train_gaia_with_aworld_verl/metrics/gaia_reward_function.py
 
@@ -36,8 +36,8 @@ agent_loop_config_path=${path_to_train}/examples/train_gaia_with_aworld_verl/age
 dummy_tool_config_path=${path_to_train}/examples/verl/configs/dummy_tool_config.yaml
 
 # =================== wandb ===================
-project_name=gaia
-experiment_name=qwe3
+project_name=aworld_train
+experiment_name=aworld_train_qwen3_4b
 default_local_dir=$DATA_ROOT/checkpoint/$experiment_name
 
 # ================= algorithm =================
@@ -51,19 +51,23 @@ kl_loss_coef=0.0
 clip_ratio_low=0.2
 clip_ratio_high=0.28
 
-max_turns=8
-max_prompt_length=1024
-max_response_length=2048
+max_turns=32
+max_prompt_length=131072  # Increased for long agent trajectories with tool calls
+max_response_length=4096  # Increased for agent responses
 actor_lr=1e-6
 
-train_batch_size=1
-ppo_mini_batch_size=1
-n_resp_per_prompt=1
-n_resp_per_prompt_val=1
+train_batch_size=32  # Smaller batches for more frequent updates with long agent trajectories
+ppo_mini_batch_size=8  # 4 gradient updates per PPO epoch, good for long agent trajectories
+n_resp_per_prompt=16  # Multiple rollouts per prompt for better PPO training
+n_resp_per_prompt_val=16  # Multiple rollouts for robust validation metrics
 
 # =================== logging ===================
 export RAY_LOGGING_LEVEL=DEBUG
 export HYDRA_FULL_ERROR=1
+
+# =================== MCP Server ===================
+# Set the MCP server URL for agent tools
+export MCP_SERVER_URL=${MCP_SERVER_URL:-http://localhost:8080/mcp}
 
 # ================= performance =================
 export NCCL_IBEXT_DISABLE=1
@@ -118,6 +122,8 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.multi_turn.max_assistant_turns=$max_turns \
     actor_rollout_ref.rollout.multi_turn.format=hermes \
     actor_rollout_ref.rollout.agent.agent_loop_config_path=$agent_loop_config_path \
+    actor_rollout_ref.rollout.max_model_len=24576 \
+    actor_rollout_ref.rollout.max_num_batched_tokens=32768 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
     actor_rollout_ref.rollout.n=$n_resp_per_prompt \
     actor_rollout_ref.rollout.val_kwargs.top_p=0.6 \
@@ -126,14 +132,14 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.multi_turn.tool_config_path=$dummy_tool_config_path \
     custom_reward_function.path="${reward_fn_file_path}"\
     custom_reward_function.name="${reward_fn_name}"\
-    trainer.logger=console \
+    trainer.logger=['console','wandb'] \
     trainer.project_name=$project_name \
     trainer.experiment_name=$experiment_name \
     trainer.n_gpus_per_node="$GPUS_PER_NODE" \
     trainer.val_before_train=true \
-    trainer.log_val_generations=50 \
+    trainer.log_val_generations=100 \
     trainer.nnodes="$NNODES" \
-    trainer.save_freq=-1 \
+    trainer.save_freq=5 \
     trainer.default_local_dir="$default_local_dir" \
     trainer.test_freq=5 \
-    trainer.total_epochs=1 "$@"
+    +trainer.num_steps=300 "$@"

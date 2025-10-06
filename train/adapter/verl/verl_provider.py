@@ -1,6 +1,7 @@
 # coding: utf-8
 # Copyright (c) 2025 inclusionAI.
 import asyncio
+import logging
 from typing import List, Dict, Any
 
 from aworld.core.llm_provider import LLMProviderBase
@@ -10,6 +11,8 @@ from aworld.utils.common import sync_exec
 
 from vllm.entrypoints.openai.protocol import ExtractedToolCallInformation
 from vllm.entrypoints.openai.tool_parsers import ToolParserManager, ToolParser
+
+logger = logging.getLogger(__name__)
 
 
 class VerlProvider(LLMProviderBase):
@@ -34,6 +37,8 @@ class VerlProvider(LLMProviderBase):
         self.sampling_params = params.get("sampling_params", {})
         self.request_id = params.get("request_id")
         self.tool_parser = params.get("tool_parser")
+        # Get max_model_len from params or use a safe default
+        self.max_model_len = params.get("max_model_len", 24576)
 
     def _init_provider(self):
         pass
@@ -80,7 +85,8 @@ class VerlProvider(LLMProviderBase):
         response_output = await self.provider.generate(
             request_id=rid, prompt_ids=prompt_ids, sampling_params=sampling_params
         )
-        content = self.tokenizer.decode(response_output.token_ids, skip_special_tokens=True)
+        # response_output is already a list of token IDs from vLLM's generate()
+        content = self.tokenizer.decode(response_output, skip_special_tokens=True)
 
         tool_parser = ToolParserManager.get_tool_parser(self.tool_parser)
         res: ExtractedToolCallInformation = tool_parser(self.tokenizer).extract_tool_calls(content, request=None)

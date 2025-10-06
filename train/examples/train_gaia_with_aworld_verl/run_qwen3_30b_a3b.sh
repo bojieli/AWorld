@@ -15,9 +15,9 @@ HDFS_ROOT=${HDFS_ROOT:-$PWD}
 DATA_ROOT=${DATA_ROOT:-$PWD}
 
 # Prefer local model if present, otherwise fall back to HF hub path
-model_path=${model_path:-$DATA_ROOT/Qwen/Qwen3-4B-Thinking-2507}
+model_path=${model_path:-$DATA_ROOT/Qwen/Qwen3-30B-A3B-Thinking-2507}
 if [ ! -d "$model_path" ]; then
-  model_path=Qwen/Qwen3-4B-Thinking-2507
+  model_path=Qwen/Qwen3-30B-A3B-Thinking-2507
 fi
 
 # Use the default output directory produced by create_dataset.py
@@ -37,7 +37,7 @@ dummy_tool_config_path=${path_to_train}/examples/verl/configs/dummy_tool_config.
 
 # =================== wandb ===================
 project_name=aworld_train
-experiment_name=aworld_train_qwen3_4b_thinking
+experiment_name=aworld_train_qwen3_30b_thinking
 default_local_dir=$DATA_ROOT/checkpoint/$experiment_name
 
 # ================= algorithm =================
@@ -77,8 +77,8 @@ export UCX_NET_DEVICES=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx
 export VLLM_USE_V1=1
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 
-infer_tp=1  # vLLM tensor parallel size
-train_sp=1  # Ulysses sequence parallel size for actor
+infer_tp=4  # vLLM tensor parallel size
+train_sp=8  # Ulysses sequence parallel size for actor
 offload=true
 
 actor_max_token_len_per_gpu=$(( ppo_mini_batch_size * max_prompt_length + max_response_length ))

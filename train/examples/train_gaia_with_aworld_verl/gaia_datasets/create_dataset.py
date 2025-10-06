@@ -30,7 +30,8 @@ def load_gaia_dataset(path: str, split: str = "validation", total_num_dataset: i
             if data["file_name"]:
                 data["file_name"] = data_dir / data["file_name"]
             split_dataset.append(data)
-            rl_dataset["prompt"].append(data["Question"])
+            # Format prompt as chat messages for VERL's return_raw_chat mode
+            rl_dataset["prompt"].append([{"role": "user", "content": data["Question"]}])
             rl_dataset["extra_info"].append(
                 {"task_id": data["task_id"], "split": split, "level": data["Level"], "answer": data["Final answer"]}
             )
